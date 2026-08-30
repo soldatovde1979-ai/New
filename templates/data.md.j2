@@ -1,0 +1,6 @@
+{# Jinja2-шаблон для генерации data.md из ScanResult. Заготовка — переменные будут уточнены вместе с реализацией generator.render(). #}
+# {{ project_name | default("Project") }} — data.md
+
+## 1. Файлы конфигурации
+
+{{ config_summary | default("TODO") }}

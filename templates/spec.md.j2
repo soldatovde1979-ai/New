@@ -1,0 +1,14 @@
+{# Jinja2-шаблон для генерации spec.md из ScanResult. Заготовка — переменные будут уточнены вместе с реализацией generator.render(). #}
+# {{ project_name | default("Project") }} — spec.md
+
+## 1. Обзор системы
+
+{{ overview | default("TODO") }}
+
+## 3. Структура файлов проекта
+
+| Путь | Роль |
+|---|---|
+{% for file in files -%}
+| `{{ file.path }}` | {{ file.role | default("TODO") }} |
+{% endfor %}

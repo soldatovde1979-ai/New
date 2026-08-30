@@ -1,0 +1,19 @@
+# Конфигурация SVO Docs Automation. Формат и поля описаны в data.md, раздел 1.1.
+source:
+  root: "."
+  include:
+    - "src/**/*.py"
+  ignore_patterns:
+    - "**/__pycache__/**"
+    - "**/.git/**"
+    - "**/tests/**"
+
+output:
+  spec_path: "spec.md"
+  data_path: "data.md"
+  cache_path: ".svo-docs-cache.json"
+
+llm:
+  enabled: false
+  provider: null
+  model: null
