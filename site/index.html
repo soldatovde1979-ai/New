@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- MASHIKA — сайт-витрина художницы. Версия 1.0 -->
+<!-- MASHIKA — сайт-витрина художницы. Версия 1.1 -->
 <html lang="ru">
 <head>
   <meta charset="utf-8">
@@ -47,6 +47,7 @@
         <p class="lead">Картины, в которых цвет говорит раньше слов.<br>Оригиналы — в одном экземпляре.</p>
         <a href="#works" class="btn">Смотреть работы</a>
       </div>
+      <p class="paint-hint" aria-hidden="true">коснитесь холста — оставьте мазок</p>
       <a href="#works" class="scroll-hint" aria-label="Прокрутить к работам"><span></span></a>
     </section>
 
@@ -61,6 +62,10 @@
       <div class="section-head reveal">
         <h2>Работы</h2>
         <p>Каждая картина — оригинал. Нажмите, чтобы рассмотреть ближе.</p>
+        <div class="filter" role="group" aria-label="Фильтр работ">
+          <button class="on" data-filter="all">Все</button>
+          <button data-filter="available">В наличии</button>
+        </div>
       </div>
       <div class="grid" id="grid"></div>
     </section>
@@ -107,10 +112,17 @@
         <h3 id="v-title"></h3>
         <p id="v-meta"></p>
         <p id="v-status" class="status"></p>
+        <button id="v-room" class="link-btn" type="button">Примерить в интерьере</button>
         <a id="v-ask" class="btn" href="#contact" data-close>Хочу эту работу</a>
       </figcaption>
     </figure>
   </dialog>
+
+  <div class="gift" id="gift" hidden>
+    <p class="kicker">этот сайт — подарок</p>
+    <p class="gift-text">Для МАШИКИ<br><em>с любовью</em> ♥</p>
+    <p class="gift-close">нажмите, чтобы вернуться</p>
+  </div>
 
   <noscript><p class="noscript">Для галереи включите JavaScript.</p></noscript>
 

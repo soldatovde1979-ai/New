@@ -1,4 +1,4 @@
-/* MASHIKA — поведение страницы. Версия 1.0 */
+/* MASHIKA — поведение страницы. Версия 1.1 */
 (function () {
   'use strict';
 
@@ -114,12 +114,13 @@
 
   function initHero() {
     var canvas = document.getElementById('paint');
-    if (!canvas || !canvas.getContext) return;
+    if (!canvas || !canvas.getContext) return { splash: function () {} };
     var ctx = canvas.getContext('2d');
     var colors = ['#e3a33a', '#d2453f', '#2b3f9e', '#1f9e8f', '#e86a92', '#f6bd60'];
     var SCALE = 6; // рисуем в низком разрешении — дёшево, а размытие скрывает пиксели
     var w = 0, h = 0, t0 = performance.now(), running = false;
     var pointer = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5 };
+    var splashes = []; // мазки посетителя: {x, y, c, born}
 
     var blobs = colors.map(function (c, i) {
       return { c: c, fx: 0.13 + i * 0.037, fy: 0.11 + i * 0.029, ph: i * 1.7, r: 0.32 + (i % 3) * 0.07 };
@@ -155,6 +156,21 @@
         ctx.arc(px, py, rad, 0, Math.PI * 2);
         ctx.fill();
       });
+      // Мазок вспыхивает, расплывается и растворяется за ~4 секунды
+      splashes = splashes.filter(function (s) { return t - s.born < 4; });
+      splashes.forEach(function (s) {
+        var age = Math.max(0, (t - s.born) / 4), px = s.x * w, py = s.y * h;
+        var rad = m * (0.06 + 0.22 * Math.sqrt(age)) * s.k;
+        var g = ctx.createRadialGradient(px, py, 0, px, py, rad);
+        g.addColorStop(0, s.c);
+        g.addColorStop(1, 'rgba(15,13,12,0)');
+        ctx.globalAlpha = 1 - age;
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(px, py, rad, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      });
       if (running) requestAnimationFrame(draw);
     }
 
@@ -165,7 +181,20 @@
       pointer.ty = e.clientY / window.innerHeight;
     }, { passive: true });
 
-    if (reduceMotion) { draw(t0 + 4000); return; }
+    function splash(x, y, k) {
+      splashes.push({ x: x, y: y, k: k || 1, born: (performance.now() - t0) / 1000,
+        c: colors[Math.floor(Math.random() * colors.length)] });
+    }
+
+    var hint = document.querySelector('.paint-hint');
+    canvas.parentNode.addEventListener('pointerdown', function (e) {
+      if (e.target.closest('a, button')) return;
+      var b = canvas.getBoundingClientRect();
+      splash((e.clientX - b.left) / b.width, (e.clientY - b.top) / b.height);
+      if (hint) hint.classList.add('gone');
+    });
+
+    if (reduceMotion) { draw(t0 + 4000); return { splash: function () {} }; }
 
     // Анимация работает только пока первый экран виден
     new IntersectionObserver(function (entries) {
@@ -173,6 +202,8 @@
       if (vis && !running) { running = true; requestAnimationFrame(draw); }
       else if (!vis) running = false;
     }).observe(canvas);
+
+    return { splash: splash };
   }
 
   function splitName() {
@@ -231,17 +262,58 @@
         frame.style.setProperty('--ry', '0deg');
       });
     });
+    // Фильтр «Все / В наличии»
+    document.querySelectorAll('[data-filter]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var onlyFree = btn.dataset.filter === 'available';
+        document.querySelectorAll('[data-filter]').forEach(function (b) { b.classList.toggle('on', b === btn); });
+        cards.forEach(function (c) {
+          c.classList.toggle('hidden', onlyFree && list[+c.dataset.i].status !== 'available');
+          c.classList.add('in');
+        });
+      });
+    });
     return cards;
   }
 
   /* ---------- Просмотр картины ---------- */
 
-  var viewer, current = 0, list = [];
+  var viewer, current = 0, list = [], inRoom = false;
+
+  // Картина над диваном в реальном масштабе: комната 400×250 см, диван 220 см
+  function roomHTML(wk) {
+    var bottom = 13 + 34 + 8; // пол (13%) + диван 85 см (34%) + зазор 20 см (8%)
+    var wPct = wk.w / 4, hPct = wk.h / 2.5;
+    if (bottom + hPct > 94) bottom = Math.max(14, 94 - hPct);
+    return '<div class="room">' +
+      '<div class="room-art" style="left:' + (50 - wPct / 2) + '%;width:' + wPct + '%;height:' + hPct +
+        '%;bottom:' + bottom + '%">' + artHTML(wk) + '</div>' +
+      '<svg class="room-sofa" viewBox="0 0 220 85" aria-hidden="true">' +
+        '<rect x="12" y="8" width="196" height="46" rx="10" fill="#4a4440"/>' +
+        '<rect x="6" y="44" width="208" height="30" rx="8" fill="#57504a"/>' +
+        '<rect x="0" y="30" width="24" height="46" rx="9" fill="#4f4843"/>' +
+        '<rect x="196" y="30" width="24" height="46" rx="9" fill="#4f4843"/>' +
+        '<rect x="20" y="76" width="5" height="9" fill="#2b2522"/><rect x="195" y="76" width="5" height="9" fill="#2b2522"/>' +
+      '</svg>' +
+      '<p class="room-note">диван 220 см — для масштаба</p></div>';
+  }
+
+  function visibleIdx() {
+    var idx = [];
+    document.querySelectorAll('.card:not(.hidden)').forEach(function (c) { idx.push(+c.dataset.i); });
+    return idx.length ? idx : list.map(function (_, i) { return i; });
+  }
+
+  function step(dir) {
+    var idx = visibleIdx(), pos = idx.indexOf(current);
+    openViewer(idx[(pos + dir + idx.length) % idx.length]);
+  }
 
   function openViewer(i) {
-    current = (i + list.length) % list.length;
+    current = i;
     var wk = list[current];
-    document.getElementById('v-art').innerHTML = artHTML(wk);
+    document.getElementById('v-art').innerHTML = inRoom ? roomHTML(wk) : artHTML(wk);
+    document.getElementById('v-room').textContent = inRoom ? 'Смотреть картину' : 'Примерить в интерьере';
     document.getElementById('v-title').textContent = wk.title;
     document.getElementById('v-meta').textContent =
       wk.technique + ' · ' + wk.w + '×' + wk.h + ' см · ' + wk.year + ' · ' + priceText(wk.price);
@@ -257,14 +329,26 @@
     if (!viewer.showModal) return; // очень старый браузер — просто без просмотра
     viewer.addEventListener('click', function (e) {
       if (e.target === viewer || e.target.closest('[data-close]')) viewer.close();
-      else if (e.target.closest('[data-prev]')) openViewer(current - 1);
-      else if (e.target.closest('[data-next]')) openViewer(current + 1);
+      else if (e.target.closest('[data-prev]')) step(-1);
+      else if (e.target.closest('[data-next]')) step(1);
+      else if (e.target.closest('#v-room')) { inRoom = !inRoom; openViewer(current); }
     });
     document.addEventListener('keydown', function (e) {
       if (!viewer.open) return;
-      if (e.key === 'ArrowLeft') openViewer(current - 1);
-      if (e.key === 'ArrowRight') openViewer(current + 1);
+      if (e.key === 'ArrowLeft') step(-1);
+      if (e.key === 'ArrowRight') step(1);
     });
+    // Свайп на телефоне
+    var sx = null, sy = 0;
+    viewer.addEventListener('touchstart', function (e) {
+      sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+    }, { passive: true });
+    viewer.addEventListener('touchend', function (e) {
+      if (sx === null) return;
+      var dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+      sx = null;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) step(dx < 0 ? 1 : -1);
+    }, { passive: true });
   }
 
   /* ---------- Мелочи: появление, шапка, курсор ---------- */
@@ -307,6 +391,26 @@
     })();
   }
 
+  /* ---------- Пасхалка: 5 кликов по имени ---------- */
+
+  function initGift(hero) {
+    var name = document.querySelector('.name'), gift = document.getElementById('gift');
+    if (!name || !gift) return;
+    var clicks = [];
+    name.addEventListener('click', function () {
+      var now = Date.now();
+      clicks = clicks.filter(function (t) { return now - t < 2500; });
+      clicks.push(now);
+      if (clicks.length < 5) return;
+      clicks = [];
+      for (var i = 0; i < 14; i++) hero.splash(Math.random(), Math.random(), 1.6);
+      gift.hidden = false;
+    });
+    gift.addEventListener('click', function () { gift.hidden = true; });
+    console.log('%cMASHIKA%c\nЭтот сайт — подарок. Сделан с любовью для МАШИКИ ♥',
+      'font: 300 40px Georgia, serif; letter-spacing: .2em; color: #e3a33a', 'font: 14px sans-serif; color: #d2453f');
+  }
+
   /* ---------- Старт ---------- */
 
   var data = window.MASHIKA_WORKS;
@@ -319,7 +423,8 @@
 
   document.getElementById('year').textContent = new Date().getFullYear();
   splitName();
-  initHero();
+  var hero = initHero();
+  initGift(hero);
   initGallery(list);
   initViewer();
   initReveal();
